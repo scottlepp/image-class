@@ -144,7 +144,7 @@ function logStats(lastCar) {
     let width = lastCar.width;
 
     // 800 px / 7 in wide
-    const PPI = 800 / 7
+    const PPI = 1024 / 9
     const widthInch = width / PPI;
 
     // use this to convert screen inch to real inch
