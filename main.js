@@ -14,6 +14,7 @@ const values = {};
 const cars = [];
 
 let video
+let tfCam
 
 async function setup() {
   console.log('Loading model..');
@@ -22,106 +23,80 @@ async function setup() {
   
   const webcamElement = document.getElementById('webcam');
   video = webcamElement
-  enableCam()
+  tfCam = await tf.data.webcam(webcamElement);
+  // enableCam()
+  app()
 }
 
 setup()
 
 async function app() {
   
-  // Create an object from Tensorflow.js data API which could capture image 
-  // from the web camera as Tensor.
-  // const webcamElement = document.getElementById('webcam');
-  // const webcam = await tf.data.webcam(webcamElement);
+    const img = await tfCam.capture();
 
-  // while (true) {
-  //   const img = await webcam.capture();
+    const items = await coco.detect(img);
 
-    coco.detect(video).then(items => {
-      for (const pred of items) {
+    const now = new Date().getTime();
 
-        if (pred.class === "car" || pred.class === "truck") {
-          const now = new Date().getTime();
-          let car = values["car"] || { start: now, count: 0 , time: now, startPos: pred.bbox };
-          if ((now - car.time) < 500) {
-            // same car
-            car.count += 1;
-            car.time = now;
-            car.end = now;
-            car.endPos = pred.bbox;
-            values["car"] = car;
-          } else {
-            const lastCar = values["car"];
-            cars.push(lastCar)
-            if (lastCar && lastCar.image && lastCar.endPos) {
-              const x1 = lastCar.startPos[0];
-              const x2 = lastCar.endPos[0];
-              const y1 = lastCar.startPos[1];
-              const y2 = lastCar.endPos[2];
-              const dist = Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
-              console.log('distance ' + dist);
+    const lastCar = values["car"] || { start: now, count: 0 , time: now, startPos: 0 };
 
-              // inches
-              const aveCarLength = 192;
-
-              const time = lastCar.end - lastCar.start;
-              // size of a car on screen is about 3/4 of an inch .75
-              const speed = dist / time * (aveCarLength * .75);
-              console.log('speed ' + speed)
-              const inchDist = dist / 96;
-              console.log('time ' + time);
-              // console.log('inches ' + inchDist);
-
-              // assume 1 inch scale
-              const scale = 1;
-              const feet = scale * 12;
-              // inch to feet * 12, feet to car average length * 16
-              // car average lenght is 192 in
-              const scaled = inchDist * aveCarLength;
-              // console.log('scaled ' + scaled)
-              // inch per second to mph
-              const realSpeed = scaled / 17.6;
-              lastCar.realSpeed = realSpeed;
-              lastCar.realSpeed = speed;
-
-              // console.log('realSpeed ' + realSpeed)
-              // console.log('count ' + lastCar.count)
-              if (speed > 20 && speed < 80) {
-                // post(lastCar)
-                addCar(lastCar)
-              }
-            }
-            console.log('last car ' + (lastCar.end - lastCar.start))
-            // assume a new car
-            console.log('---- new car -----')
-            values["car"] = { start: now, count: 1, time: now, startPos: pred.bbox };
-            setTimeout(() => {
-              const {image, canvas} = getScreenshot(video);
-              values["car"].image = image;
-              values["car"].canvas = canvas;
-            }, 200);
-          }
-          add(pred.class, car);
-        } else {
-          console.log(pred.class)
-        }
+    // check if the last car has passed
+    // assume if it hasn't been seen for 1 second its gone
+    if (items.length === 0 && (now - lastCar.time) > 1000 && !lastCar.logged) {
+      lastCar.logged = true;
+      values["car"] = lastCar;
+      logStats(lastCar)
+      if (lastCar && lastCar.image && lastCar.endPos) {
+        addCar(lastCar)
       }
+    }
 
-      window.requestAnimationFrame(app);
-      
-    });
+    for (const pred of items) {
 
-    // Dispose the tensor to release the memory.
-    // img.dispose();
+      if (pred.class === "car" || pred.class === "truck") {
+        
+        let car = values["car"] || { start: now, count: 0 , time: now, startPos: pred.bbox, width: pred.bbox[2] };
+        if ((now - car.time) < 500) {
+          // same car
+          car.count += 1;
+          car.time = now;
+          car.end = now;
+          car.endPos = pred.bbox;
+          if (car.width < pred.bbox[2]) {
+            car.width = pred.bbox[2]
+          }
+          values["car"] = car;
+          // console.log(pred.bbox[2])
+        } else {
+          const lastCar = values["car"];
+          cars.push(lastCar)
+          if (lastCar && lastCar.image && lastCar.endPos) {
+            // logStats(lastCar)
+            // if (lastCar.realSpeed > 20 && lastCar.realSpeed < 80) {
+            //   // post(lastCar)
+            // addCar(lastCar)
+            // }
+          }
+          // console.log('last car ' + (lastCar.end - lastCar.start))
+          // assume a new car
+          console.log('---- new car -----')
+          values["car"] = { start: now, count: 1, time: now, startPos: pred.bbox, width: pred.bbox[2] };
+          setTimeout(() => {
+            const {image, canvas} = getScreenshot(video);
+            values["car"].image = image;
+            values["car"].canvas = canvas;
+          }, 200);
+        }
+        add(pred.class, car);
+      } else {
+        console.log(pred.class)
+      }
+    }
 
-    // Give some breathing room by waiting for the next animation frame to
-    // fire.
+    img.dispose();
     await tf.nextFrame();
-    // await timer(0);
+    app();
   }
-// }
-
-// app();
 
 function add(cat, car) {
 
@@ -157,9 +132,63 @@ function getScreenshot(videoEl, scale) {
   return {image, canvas};
 }
 
+function logStats(lastCar) {
+  if (lastCar && lastCar.image && lastCar.endPos) {
+    const x1 = lastCar.startPos[0];
+    const x2 = lastCar.endPos[0];
+    const y1 = lastCar.startPos[1];
+    const y2 = lastCar.endPos[2];
+    const dist = Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
+    console.log('distance ' + dist);
+
+    let width = lastCar.width;
+
+    // 800 px / 7 in wide
+    const PPI = 800 / 7
+    const widthInch = width / PPI;
+
+    // use this to convert screen inch to real inch
+    const aveCarLength = 192;  // inches
+
+    const carLength = widthInch * aveCarLength;
+    console.log('car length ' + (carLength / 12))
+    const time = lastCar.end - lastCar.start;
+    const inchDist = dist / PPI;
+    // console.log('inch dist ' + inchDist);
+
+    // scale screen inches to real inches
+    const realInches = inchDist * aveCarLength;
+    const feet = realInches / 12;
+
+    // console.log('real inch dist ' + realInches)
+    console.log('feet ' + feet)
+    const seconds = time / 1000;
+    console.log('seconds ' + seconds);
+
+    const feetPerSecond = feet / seconds;
+
+    console.log('FPS ' + feetPerSecond)
+
+    // convert feet per second to mph
+    const mph = feetPerSecond / 1.467;
+
+    console.log('mph ' + mph)
+    lastCar.realSpeed = mph;
+  }
+}
+
 function addCar(car) {
   const totalEl = document.getElementById('total');
   totalEl.innerHTML = cars.length;
+  var ul = document.getElementById("cars");
+  var li = document.createElement("li");
+  // var img=document.createElement('img');
+  // img.src=car.img;
+  var span = document.createElement("span")
+  span.innerHTML = Math.round(car.realSpeed);
+  li.appendChild(span);
+  li.appendChild(car.image);
+  ul.appendChild(li);
 }
 
 async function post(car) {
