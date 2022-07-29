@@ -97,7 +97,7 @@ async function app() {
     //   }
     // }
 
-    coco.detect(img).then(items => {
+    coco.detect(img, 2, 0.1).then(items => {
       // console.log('Predictions: ', predictions);
       // if (items.length === 0) {
       //   now = new Date().getTime();
