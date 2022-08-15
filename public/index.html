@@ -6,23 +6,25 @@
     <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script> -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"> </script>
     <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0"></script> -->
+    <link rel="stylesheet" href="./style.css">
   </head>
   <body>
     <div id="console"></div>
     <!-- Load index.js after the content of the page -->
     <script src="main.js"></script>
 
-    <video autoplay playsinline muted id="webcam" width="1024" height="576"></video>
+    <div id="liveView" class="videoView">
+      <video autoplay muted id="webcam"></video>
+    </div>
+    <!-- <video autoplay playsinline muted id="webcam" width="1024" height="576"></video> -->
     <!-- <img id="img" crossorigin src="./curl.png" width="227" height="227"/> -->
     <ul id="list">
     </ul>
     <div>
-      Version 3
-    </div>
-    <div>
       Total Cars: <span id="total">0</span>
     </div>
     <ul id="cars">
+      
     </ul>
   </body>
 </html>

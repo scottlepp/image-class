@@ -20,6 +20,9 @@ let liveView = document.getElementById('liveView');
 
 let lastLog = new Date().getTime();
 
+
+const SPEED_LIMIT = 35;  // todo setting
+
 async function setup() {
   console.log('Loading model..');
   coco = await cocoSsd.load({base: 'mobilenet_v2'});
@@ -65,211 +68,327 @@ async function app() {
 
   // const items = await coco.detect(img);
 
-  const items = await coco.detect(video, 2, 0.4);
+  let sd = new Date().getTime();
+  const items = await coco.detect(video, 1, 0.2);
+  let endsd = new Date().getTime();
+
+  let totaltime = endsd - sd;
+
   const now = new Date().getTime();
 
-  // Remove any highlighting we did previous frame.
-  for (let i = 0; i < children.length; i++) {
-    liveView.removeChild(children[i]);
+  // // Remove any highlighting we did previous frame.
+  // for (let i = 0; i < children.length; i++) {
+  //   liveView.removeChild(children[i]);
+  // }
+  // children.splice(0);
+
+  const lastCar = values["car"] || { start: now, count: 0 , time: now, startPos: 0, totalTime: totaltime };
+
+  if (lastCar.start === now) {
+    // console.log('started ' + now)
+  } else {
+    lastCar.totalTime = lastCar.totalTime + totaltime;
   }
-  children.splice(0);
-
-  const lastCar = values["car"] || { start: now, count: 0 , time: now, startPos: 0 };
-
   // check if the last car has passed
   // assume if it hasn't been seen for 1 second its gone
   if (items.length === 0 && (now - lastCar.time) > 1000 && !lastCar.logged) {
     lastCar.logged = true;
     values["car"] = lastCar;
     logStats(lastCar)
-    if (lastCar && lastCar.image && lastCar.endPos) {
+    // setTimeout(() => {
+    //   for (let i = 0; i < children.length; i++) {
+    //     liveView.removeChild(children[i]);
+    //   }
+    //   children.splice(0);
+    // }, 200);
+
+    if (lastCar && lastCar.endPos) {
+    // if (lastCar && lastCar.image && lastCar.endPos) {
       addCar(lastCar)
+      setTimeout(() => {
+        const {image, canvas} = getScreenshot(video);
+        lastCar.image = image;
+        lastCar.canvas = canvas;
+        postToLoki(lastCar)
+      }, 20);
     }
   }
 
-  for (const pred of items) {
+  if (items.length > 0) {
+    for (const pred of items) {
+      //setTimeout(() => {
+      // const pred = items[0];
+      if (pred.class === "car" || pred.class === "truck") {
+        // const highlighter = document.createElement('div');
+        // highlighter.setAttribute('class', 'highlighter');
+        // highlighter.style = 'left: ' + (pred.bbox[0]) + 'px; top: '
+        //     + pred.bbox[1] + 'px; width: ' 
+        //     + pred.bbox[2] + 'px; height: '
+        //     + pred.bbox[3] + 'px;';
 
-    if (pred.class === 'person' && calibrating) {
+        // liveView.appendChild(highlighter);
+        // // liveView.appendChild(p);
+        // children.push(highlighter);
+        // children.push(p);
 
-
-      const p = document.createElement('p');
-      p.innerText = pred.class  + ' - with ' 
-          + Math.round(parseFloat(pred.score) * 100) 
-          + '% confidence.';
-      p.style = 'margin-left: ' + pred.bbox[0] + 'px; margin-top: '
-          + (pred.bbox[1] - 10) + 'px; width: ' 
-          + (pred.bbox[2] - 10) + 'px; top: 0; left: 0;';
-
-      const highlighter = document.createElement('div');
-      highlighter.setAttribute('class', 'highlighter');
-      highlighter.style = 'left: ' + pred.bbox[0] + 'px; top: '
-          + pred.bbox[1] + 'px; width: ' 
-          + pred.bbox[2] + 'px; height: '
-          + pred.bbox[3] + 'px;';
-
-      liveView.appendChild(highlighter);
-      liveView.appendChild(p);
-      children.push(highlighter);
-      children.push(p);
-
-            // bbox = x, y, width, height
-
-      // calc PPI using known height of person standing in the road?
-      // calc distance from camera to road based on PPI?
-
-      let person = values["person"] || { start: now, count: 0 , time: now, lastMove: now, startPos: pred.bbox, width: pred.bbox[2], grow: 0 };
-      //if ((now - person.time) < 1000) {
-        // assume same person - still in frame within a second
-
-        const height = pred.bbox[3];
-        if (person.height === undefined) {
-          person.height = height;
-        }
-        if (height < person.height) {
-          person.height = height;
-          if (person.grow > 0) {
-            person.grow = person.grow - 1;
+        const cur = new Date().getTime();
+        let car = values["car"] || { start: cur, count: 0 , time: cur, startPos: pred.bbox, width: pred.bbox[2], totalTime: totaltime };
+        if ((cur - car.time) < 500) {
+          // same car
+          car.count += 1;
+          car.time = cur;
+          car.end = cur;
+          car.endPos = pred.bbox;
+          if (car.width < pred.bbox[2]) {
+            car.width = pred.bbox[2]
           }
-        } else if (height === person.height) {
-
+          values["car"] = car;
+          // console.log(pred.bbox[2])
         } else {
-          person.grow = person.grow + 1; 
+          const lastCar = values["car"];
+          cars.push(lastCar)
+          if (lastCar && lastCar.image && lastCar.endPos) {
+            // logStats(lastCar)
+            // if (lastCar.realSpeed > 20 && lastCar.realSpeed < 80) {
+            //   // post(lastCar)
+            // addCar(lastCar)
+            // }
+          }
+          // console.log('last car ' + (lastCar.end - lastCar.start))
+          // assume a new car
+          console.log('---- new car -----')
+          values["car"] = { start: cur, count: 1, time: cur, startPos: pred.bbox, width: pred.bbox[2], totalTime: 0 };
+          // setTimeout(() => {
+          //   const {image, canvas} = getScreenshot(video);
+          //   values["car"].image = image;
+          //   values["car"].canvas = canvas;
+          // }, 200);
         }
-
-        if (person.grow > 500 && !person.screenshot) {
-          console.log(person.height);
-          person.screenshot = true;
-          setTimeout(() => {
-            const {image, canvas} = getScreenshot(video);
-            person.image = image;
-            person.canvas = canvas;
-            addCar(person)
-          }, 200);
-        }
-        // check if the person has moved
-        // const lastPerson = values["person"] || {};
-        // let lastMove = person.lastMove || now;
-        // if (person.endPos) {
-          // const secs = (now - person.lastMove) / 1000;
-          // console.log(secs)
-
-          // const lastHeight = person.endPos[3];
-          // if (pred.bbox[0] === lastPerson.endPos[0] && pred.bbox[1] === lastPerson.endPos[1] && pred.bbox[2] === lastPerson.endPos[2] && pred.bbox[3] === lastPerson.endPos[3] && secs < 5) {
-          //   lastMove = lastPerson.lastMove;
-          //   // console.log(lastMove)
-          // } else if (pred.bbox[0] === lastPerson.endPos[0] && pred.bbox[1] === lastPerson.endPos[1] && pred.bbox[2] === lastPerson.endPos[2] && pred.bbox[3] === lastPerson.endPos[3] && secs > 5 ) {
-          //   console.log('didn not move for 5 secs');
-          //   console.log(lastPerson.bbox)
-          //   // reset
-          //   lastMove = now;
-          // } else {
-          //   console.log(pred.bbox)
-          //   console.log(lastPerson.endPos)
-          //   lastMove = now;
-          // }
-          // const diff = Math.abs(height - lastHeight);
-          // if (diff < 10 && secs < 5) {
-          //   lastMove = person.lastMove;
-          //   // console.log(lastMove)
-          // } else if (diff < 2 && secs > 5 ) {
-          //   console.log('didn not move for 5 secs');
-          //   console.log(person)
-          //   // reset
-          //   lastMove = now;
-
-          //   setTimeout(() => {
-          //     const {image, canvas} = getScreenshot(video);
-          //     person.image = image;
-          //     person.canvas = canvas;
-          //     addCar(person)
-          //   }, 200);
-          // } else {
-          //   // console.log(height + ' ' + lastHeight)
-          //   lastMove = now;
-          // }
-          // if (pred.bbox === lastPerson.endPos && secs < 5) {
-          //   // person didn't move
-          //   lastMove = lastPerson.lastMove;
-          // }
-          // if (pred.bbox === lastPerson.bbox && secs > 5 ) {
-          //   console.log('didn not move for 5 secs');
-          //   console.log(lastPerson.bbox)
-          //   lastMove = lastPerson.lastMove;
-          // }
-        // } else {
-        //   console.log(lastMove)
-        // }
-
-        person.count += 1;
-        person.time = now;
-        person.end = now;
-        person.endPos = pred.bbox;
-        // person.lastMove = lastMove;
-        if (person.width < pred.bbox[2]) {
-          person.width = pred.bbox[2]
-        }
-
-        values["person"] = person;
-      //} else {
-        // const lastPerson = values["person"];
-        // if (lastPerson.endPos === pred.bbox && now-lastPerson.time) {
-        // console.log('new person')
-        // }
-        // values['person'] = { start: now, count: 0 , time: now, lastMove: now, startPos: pred.bbox, width: pred.bbox[2] };
-      //}
-    }
-
-    if ((now - lastLog) / 1000 > 1) {
-      console.log(pred)
-      lastLog = new Date().getTime();
-    }
-
-    if (calibrating) {
-      continue;
-    }
-
-    if (pred.class === "car" || pred.class === "truck") {
-      
-      let car = values["car"] || { start: now, count: 0 , time: now, startPos: pred.bbox, width: pred.bbox[2] };
-      if ((now - car.time) < 500) {
-        // same car
-        car.count += 1;
-        car.time = now;
-        car.end = now;
-        car.endPos = pred.bbox;
-        if (car.width < pred.bbox[2]) {
-          car.width = pred.bbox[2]
-        }
-        values["car"] = car;
-        // console.log(pred.bbox[2])
-      } else {
-        const lastCar = values["car"];
-        cars.push(lastCar)
-        if (lastCar && lastCar.image && lastCar.endPos) {
-          // logStats(lastCar)
-          // if (lastCar.realSpeed > 20 && lastCar.realSpeed < 80) {
-          //   // post(lastCar)
-          // addCar(lastCar)
-          // }
-        }
-        // console.log('last car ' + (lastCar.end - lastCar.start))
-        // assume a new car
-        console.log('---- new car -----')
-        values["car"] = { start: now, count: 1, time: now, startPos: pred.bbox, width: pred.bbox[2] };
-        setTimeout(() => {
-          const {image, canvas} = getScreenshot(video);
-          values["car"].image = image;
-          values["car"].canvas = canvas;
-        }, 200);
       }
-      add(pred.class, car);
-    } else {
-      //console.log(pred.class)
+      //}, 0);
     }
   }
+
+  // for (const pred of items) {
+
+  //   console.log('items: ' + items.length + ' preds: ' + pred.length)
+  //   // const highlighter = document.createElement('div');
+  //   // highlighter.setAttribute('class', 'highlighter');
+  //   // highlighter.style = 'left: ' + pred.bbox[0] + 'px; top: '
+  //   //     + pred.bbox[1] + 'px; width: ' 
+  //   //     + pred.bbox[2] + 'px; height: '
+  //   //     + pred.bbox[3] + 'px;';
+  
+  //   // liveView.appendChild(highlighter);
+  //   // //liveView.appendChild(p);
+  //   // children.push(highlighter);
+
+  //   // if (pred.class === 'person' && calibrating) {
+
+
+  //   //   // const p = document.createElement('p');
+  //   //   // p.innerText = pred.class  + ' - with ' 
+  //   //   //     + Math.round(parseFloat(pred.score) * 100) 
+  //   //   //     + '% confidence.';
+  //   //   // p.style = 'margin-left: ' + pred.bbox[0] + 'px; margin-top: '
+  //   //   //     + (pred.bbox[1] - 10) + 'px; width: ' 
+  //   //   //     + (pred.bbox[2] - 10) + 'px; top: 0; left: 0;';
+
+  //   //   const highlighter = document.createElement('div');
+  //   //   highlighter.setAttribute('class', 'highlighter');
+  //   //   highlighter.style = 'left: ' + pred.bbox[0] + 'px; top: '
+  //   //       + pred.bbox[1] + 'px; width: ' 
+  //   //       + pred.bbox[2] + 'px; height: '
+  //   //       + pred.bbox[3] + 'px;';
+
+  //   //   liveView.appendChild(highlighter);
+  //   //   //liveView.appendChild(p);
+  //   //   children.push(highlighter);
+  //     //children.push(p);
+
+  //           // bbox = x, y, width, height
+
+  //     // calc PPI using known height of person standing in the road?
+  //     // calc distance from camera to road based on PPI?
+
+  //     // let person = values["person"] || { start: now, count: 0 , time: now, lastMove: now, startPos: pred.bbox, width: pred.bbox[2], grow: 0 };
+  //     // //if ((now - person.time) < 1000) {
+  //     //   // assume same person - still in frame within a second
+
+  //     //   const height = pred.bbox[3];
+  //     //   if (person.height === undefined) {
+  //     //     person.height = height;
+  //     //   }
+  //     //   if (height < person.height) {
+  //     //     person.height = height;
+  //     //     if (person.grow > 0) {
+  //     //       person.grow = person.grow - 1;
+  //     //     }
+  //     //   } else if (height === person.height) {
+
+  //     //   } else {
+  //     //     person.grow = person.grow + 1; 
+  //     //   }
+
+  //     //   if (person.grow > 500 && !person.screenshot) {
+  //     //     console.log(person.height);
+  //     //     person.screenshot = true;
+  //     //     setTimeout(() => {
+  //     //       const {image, canvas} = getScreenshot(video);
+  //     //       person.image = image;
+  //     //       person.canvas = canvas;
+  //     //       addCar(person)
+  //     //     }, 200);
+  //     //   }
+  //       // check if the person has moved
+  //       // const lastPerson = values["person"] || {};
+  //       // let lastMove = person.lastMove || now;
+  //       // if (person.endPos) {
+  //         // const secs = (now - person.lastMove) / 1000;
+  //         // console.log(secs)
+
+  //         // const lastHeight = person.endPos[3];
+  //         // if (pred.bbox[0] === lastPerson.endPos[0] && pred.bbox[1] === lastPerson.endPos[1] && pred.bbox[2] === lastPerson.endPos[2] && pred.bbox[3] === lastPerson.endPos[3] && secs < 5) {
+  //         //   lastMove = lastPerson.lastMove;
+  //         //   // console.log(lastMove)
+  //         // } else if (pred.bbox[0] === lastPerson.endPos[0] && pred.bbox[1] === lastPerson.endPos[1] && pred.bbox[2] === lastPerson.endPos[2] && pred.bbox[3] === lastPerson.endPos[3] && secs > 5 ) {
+  //         //   console.log('didn not move for 5 secs');
+  //         //   console.log(lastPerson.bbox)
+  //         //   // reset
+  //         //   lastMove = now;
+  //         // } else {
+  //         //   console.log(pred.bbox)
+  //         //   console.log(lastPerson.endPos)
+  //         //   lastMove = now;
+  //         // }
+  //         // const diff = Math.abs(height - lastHeight);
+  //         // if (diff < 10 && secs < 5) {
+  //         //   lastMove = person.lastMove;
+  //         //   // console.log(lastMove)
+  //         // } else if (diff < 2 && secs > 5 ) {
+  //         //   console.log('didn not move for 5 secs');
+  //         //   console.log(person)
+  //         //   // reset
+  //         //   lastMove = now;
+
+  //         //   setTimeout(() => {
+  //         //     const {image, canvas} = getScreenshot(video);
+  //         //     person.image = image;
+  //         //     person.canvas = canvas;
+  //         //     addCar(person)
+  //         //   }, 200);
+  //         // } else {
+  //         //   // console.log(height + ' ' + lastHeight)
+  //         //   lastMove = now;
+  //         // }
+  //         // if (pred.bbox === lastPerson.endPos && secs < 5) {
+  //         //   // person didn't move
+  //         //   lastMove = lastPerson.lastMove;
+  //         // }
+  //         // if (pred.bbox === lastPerson.bbox && secs > 5 ) {
+  //         //   console.log('didn not move for 5 secs');
+  //         //   console.log(lastPerson.bbox)
+  //         //   lastMove = lastPerson.lastMove;
+  //         // }
+  //       // } else {
+  //       //   console.log(lastMove)
+  //       // }
+
+  //       // person.count += 1;
+  //       // person.time = now;
+  //       // person.end = now;
+  //       // person.endPos = pred.bbox;
+  //       // // person.lastMove = lastMove;
+  //       // if (person.width < pred.bbox[2]) {
+  //       //   person.width = pred.bbox[2]
+  //       // }
+
+  //       // values["person"] = person;
+  //     //} else {
+  //       // const lastPerson = values["person"];
+  //       // if (lastPerson.endPos === pred.bbox && now-lastPerson.time) {
+  //       // console.log('new person')
+  //       // }
+  //       // values['person'] = { start: now, count: 0 , time: now, lastMove: now, startPos: pred.bbox, width: pred.bbox[2] };
+  //     //}
+  //   // }
+
+  //   // if ((now - lastLog) / 1000 > 1) {
+  //   //   console.log(pred)
+  //   //   lastLog = new Date().getTime();
+  //   // }
+
+  //   // if (calibrating) {
+  //   //   continue;
+  //   // }
+
+  //   if (pred.class === "car" || pred.class === "truck") {
+      
+  //     // const p = document.createElement('p');
+  //     // p.innerText = pred.class  + ' - with ' 
+  //     //     + Math.round(parseFloat(pred.score) * 100) 
+  //     //     + '% confidence.';
+  //     // p.style = 'margin-left: ' + pred.bbox[0] + 'px; margin-top: '
+  //     //     + (pred.bbox[1] - 10) + 'px; width: ' 
+  //     //     + (pred.bbox[2] - 10) + 'px; top: 0; left: 0;';
+
+  //     const highlighter = document.createElement('div');
+  //     highlighter.setAttribute('class', 'highlighter');
+  //     highlighter.style = 'left: ' + (pred.bbox[0]) + 'px; top: '
+  //         + pred.bbox[1] + 'px; width: ' 
+  //         + pred.bbox[2] + 'px; height: '
+  //         + pred.bbox[3] + 'px;';
+
+  //     liveView.appendChild(highlighter);
+  //     // liveView.appendChild(p);
+  //     children.push(highlighter);
+  //     // children.push(p);
+
+  //     let car = values["car"] || { start: now, count: 0 , time: now, startPos: pred.bbox, width: pred.bbox[2] };
+  //     if ((now - car.time) < 500) {
+  //       // same car
+  //       car.count += 1;
+  //       car.time = now;
+  //       car.end = now;
+  //       car.endPos = pred.bbox;
+  //       if (car.width < pred.bbox[2]) {
+  //         car.width = pred.bbox[2]
+  //       }
+  //       values["car"] = car;
+  //       // console.log(pred.bbox[2])
+  //     } else {
+  //       const lastCar = values["car"];
+  //       cars.push(lastCar)
+  //       if (lastCar && lastCar.image && lastCar.endPos) {
+  //         // logStats(lastCar)
+  //         // if (lastCar.realSpeed > 20 && lastCar.realSpeed < 80) {
+  //         //   // post(lastCar)
+  //         // addCar(lastCar)
+  //         // }
+  //       }
+  //       // console.log('last car ' + (lastCar.end - lastCar.start))
+  //       // assume a new car
+  //       console.log('---- new car -----')
+  //       values["car"] = { start: now, count: 1, time: now, startPos: pred.bbox, width: pred.bbox[2] };
+  //       // setTimeout(() => {
+  //       //   const {image, canvas} = getScreenshot(video);
+  //       //   values["car"].image = image;
+  //       //   values["car"].canvas = canvas;
+  //       // }, 200);
+  //     }
+  //     // add(pred.class, car);
+  //   } else {
+  //     //console.log(pred.class)
+  //   }
+  // }
 
   // img.dispose();
   await tf.nextFrame();
+  // window.requestAnimationFrame(app);
+  // setTimeout(() => {
+  //   app();
+  // }, 10);
+
   app();
 }
 
@@ -299,7 +418,7 @@ function add(cat, car) {
  * @returns {Element} Screenshot image element
  */
 function getScreenshot(videoEl, scale) {
-  scale = scale || 1;
+  scale = scale || .5;  // make image smaller for loki size limit
 
   const canvas = document.createElement("canvas");
   canvas.width = videoEl.clientWidth * scale;
@@ -312,13 +431,14 @@ function getScreenshot(videoEl, scale) {
 }
 
 function logStats(lastCar) {
-  if (lastCar && lastCar.image && lastCar.endPos) {
+  if (lastCar && lastCar.endPos) {
+  //if (lastCar && lastCar.image && lastCar.endPos) {
     const x1 = lastCar.startPos[0];
     const x2 = lastCar.endPos[0];
     const y1 = lastCar.startPos[1];
     const y2 = lastCar.endPos[2];
     const dist = Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
-    console.log('distance ' + dist);
+    // console.log('distance ' + dist);
 
     let width = lastCar.width;
 
@@ -346,7 +466,7 @@ function logStats(lastCar) {
     const pixelsPerInch = heightInPixels / heightInInches;
     const carLen = width / pixelsPerInch;
 
-    console.log('car len: ' + carLen / 12);
+    // console.log('car len: ' + carLen / 12);
 
     const carLength = width * conversion;
 
@@ -364,7 +484,7 @@ function logStats(lastCar) {
     // const aveCarLength = 210;  // inches
 
     // const carLength = widthInch * aveCarLength;
-    console.log('car length ' + (carLength / 12))
+    // console.log('car length ' + (carLength / 12))
     const time = lastCar.end - lastCar.start;
     // const inchDist = dist / PPI;
     // console.log('inch dist ' + inchDist);
@@ -377,35 +497,114 @@ function logStats(lastCar) {
     // console.log('real inch dist ' + realInches)
     // should be 85 from office window
     // const feet = carLength / 12;
-    console.log('feet ' + feet)
+    // console.log('feet ' + feet)
     const seconds = time / 1000;
-    console.log('seconds ' + seconds);
+    // console.log('seconds ' + seconds);
 
     const feetPerSecond = feet / seconds;
 
-    console.log('FPS ' + feetPerSecond)
+    // console.log('FPS ' + feetPerSecond)
 
     // convert feet per second to mph
     const mph = feetPerSecond / 1.467;
 
-    console.log('mph ' + mph)
     lastCar.realSpeed = mph;
+    lastCar.distanceInFeet = feet;
+    lastCar.distanceInPixels = dist;
+    lastCar.seconds = seconds;
+    lastCar.totalSeconds = lastCar.totalTime / 1000;
+
+    console.log('mph: ' + mph + ' feet: ' + feet + ' second: ' + seconds + ' count: ' + lastCar.count + ' totalsecs: ' + lastCar.totalSeconds)
   }
 }
 
 function addCar(car) {
-  const totalEl = document.getElementById('total');
-  totalEl.innerHTML = cars.length;
-  var ul = document.getElementById("cars");
-  var li = document.createElement("li");
-  // var img=document.createElement('img');
-  // img.src=car.img;
-  var span = document.createElement("span")
-  span.innerHTML = Math.round(car.realSpeed);
-  li.appendChild(span);
-  li.appendChild(car.image);
-  ul.appendChild(li);
+  // const totalEl = document.getElementById('total');
+  // totalEl.innerHTML = cars.length;
+  // var ul = document.getElementById("cars");
+  // var li = document.createElement("li");
+  // // var img=document.createElement('img');
+  // // img.src=car.img;
+  // var span = document.createElement("span")
+  // span.innerHTML = Math.round(car.realSpeed);
+  // li.appendChild(span);
+  // li.appendChild(car.image);
+  // ul.appendChild(li);
 }
+
+async function postToLoki(car) {
+  // console.log('posting to loki')
+  // const image = car.image.src.split(',')[1]
+  car.name = new Date().getTime();
+  // const url = `http://localhost:8082/cars/${car.name}.png`;
+  // const body = `speed mph=${car.realSpeed},car="${url}"`;
+
+  const canvas = car.canvas;
+  if (car.realSpeed > SPEED_LIMIT + 10 ) {
+    const image = canvas.toDataURL();
+    car.image = image;
+  }
+    // const formData = new FormData();
+    // formData.append('car', blob, `${car.name}.png`);
+    // const res = await fetch('http://localhost:8082/upload', {
+    //   method: 'POST',
+    //   body: formData
+    // });
+    // const rawResponse = await res.json()
+    // // const content = await rawResponse.json();
+    // console.log(rawResponse);
+
+  const body = JSON.stringify(car);
+
+  const app = { app: "optycop" }
+
+  const time = new Date();
+  const unixTimestamp = Math.floor(time.getTime() / 1000);
+
+  const payload = {
+    streams: [
+      {
+        stream: app,
+        values: [
+            [`${unixTimestamp}000000000`, body]
+        ]
+      }
+    ]
+  }
+
+  const paystr = JSON.stringify(payload);
+  // console.log(paystr)
+
+  // console.log('posting to loki')
+  //https://logs-prod3.grafana.net/loki/api/v1/push
+  const url = 'http://localhost:8010/proxy/loki/api/v1/push'
+  const rawResponse = await fetch(url, {
+    method: 'POST',
+    headers: {
+      // mode: 'no-cors',
+      'Accept': 'text/plain',
+      'Content-Type': 'application/json',
+      'Authorization': 'Basic ' + btoa('242200' + ':' + 'eyJrIjoiMWE5MGNkMzc3ODZkYzUxYjY0ODU3NTQ5ZDQ1M2EyZjMzMjNmOWExMyIsIm4iOiJsb2tpIiwiaWQiOjMyMzQwOH0=')
+    },
+    body: paystr
+  });
+
+  console.log('posted to loki');
+  // upload image
+  // const canvas = car.canvas;
+  // canvas.toBlob(async function(blob) {
+  //   const formData = new FormData();
+  //   formData.append('car', blob, `${car.name}.png`);
+  //   const res = await fetch('http://localhost:8082/upload', {
+  //     method: 'POST',
+  //     body: formData
+  //   });
+  //   const rawResponse = await res.json()
+  //   // const content = await rawResponse.json();
+  //   console.log(rawResponse);
+  // });
+}
+
 
 async function post(car) {
   const image = car.image.src.split(',')[1]
