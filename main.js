@@ -20,10 +20,19 @@ let liveView = document.getElementById('liveView');
 
 let lastLog = new Date().getTime();
 
+let geo = {coords: {latitude: 0, longitude: 0}};
 
 const SPEED_LIMIT = 35;  // todo setting
 
 async function setup() {
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      geo = position;
+      console.log(geo)
+    });
+  }
+
   console.log('Loading model..');
   coco = await cocoSsd.load({base: 'mobilenet_v2'});
   console.log('Successfully loaded model');
@@ -104,13 +113,13 @@ async function app() {
 
     if (lastCar && lastCar.endPos) {
     // if (lastCar && lastCar.image && lastCar.endPos) {
-      addCar(lastCar)
       setTimeout(() => {
-        const {image, canvas} = getScreenshot(video);
-        lastCar.image = image;
-        lastCar.canvas = canvas;
+        // const {image, canvas} = getScreenshot(video);
+        // lastCar.image = image;
+        // lastCar.canvas = canvas;
         postToLoki(lastCar)
-      }, 20);
+        addCar(lastCar)
+      }, 0);
     }
   }
 
@@ -133,6 +142,7 @@ async function app() {
 
         const cur = new Date().getTime();
         let car = values["car"] || { start: cur, count: 0 , time: cur, startPos: pred.bbox, width: pred.bbox[2], totalTime: totaltime };
+        // TODO: handle multiple cars at the same time
         if ((cur - car.time) < 500) {
           // same car
           car.count += 1;
@@ -157,12 +167,13 @@ async function app() {
           // console.log('last car ' + (lastCar.end - lastCar.start))
           // assume a new car
           console.log('---- new car -----')
-          values["car"] = { start: cur, count: 1, time: cur, startPos: pred.bbox, width: pred.bbox[2], totalTime: 0 };
-          // setTimeout(() => {
-          //   const {image, canvas} = getScreenshot(video);
-          //   values["car"].image = image;
-          //   values["car"].canvas = canvas;
-          // }, 200);
+          const startTime = new Date().getTime();
+          values["car"] = { start: startTime, count: 1, time: startTime, startPos: pred.bbox, width: pred.bbox[2], totalTime: totaltime };
+          setTimeout(() => {
+            const {image, canvas} = getScreenshot(video);
+            values["car"].image = image;
+            values["car"].canvas = canvas;
+          }, 200);
         }
       }
       //}, 0);
@@ -506,10 +517,10 @@ function logStats(lastCar) {
     // console.log('FPS ' + feetPerSecond)
 
     // convert feet per second to mph
-    const mph = feetPerSecond / 1.467;
+    const mph = Math.round(feetPerSecond / 1.467);
 
     lastCar.realSpeed = mph;
-    lastCar.distanceInFeet = feet;
+    lastCar.distanceInFeet = Math.round(feet);
     lastCar.distanceInPixels = dist;
     lastCar.seconds = seconds;
     lastCar.totalSeconds = lastCar.totalTime / 1000;
@@ -519,17 +530,17 @@ function logStats(lastCar) {
 }
 
 function addCar(car) {
-  // const totalEl = document.getElementById('total');
-  // totalEl.innerHTML = cars.length;
-  // var ul = document.getElementById("cars");
-  // var li = document.createElement("li");
-  // // var img=document.createElement('img');
-  // // img.src=car.img;
-  // var span = document.createElement("span")
-  // span.innerHTML = Math.round(car.realSpeed);
-  // li.appendChild(span);
-  // li.appendChild(car.image);
-  // ul.appendChild(li);
+  const totalEl = document.getElementById('total');
+  totalEl.innerHTML = cars.length;
+  var ul = document.getElementById("cars");
+  var li = document.createElement("li");
+  // var img=document.createElement('img');
+  // img.src=car.image.src;
+  var span = document.createElement("span")
+  span.innerHTML = Math.round(car.realSpeed);
+  li.appendChild(span);
+  li.appendChild(car.image);
+  ul.appendChild(li);
 }
 
 async function postToLoki(car) {
@@ -544,6 +555,10 @@ async function postToLoki(car) {
     const image = canvas.toDataURL();
     car.image = image;
   }
+
+  car.lat = geo.coords.latitude;
+  car.lng = geo.coords.longitude;
+
     // const formData = new FormData();
     // formData.append('car', blob, `${car.name}.png`);
     // const res = await fetch('http://localhost:8082/upload', {
@@ -575,7 +590,7 @@ async function postToLoki(car) {
   const paystr = JSON.stringify(payload);
   // console.log(paystr)
 
-  // console.log('posting to loki')
+  console.log('posting to loki')
   //https://logs-prod3.grafana.net/loki/api/v1/push
   const url = 'http://localhost:8010/proxy/loki/api/v1/push'
   const rawResponse = await fetch(url, {
@@ -584,7 +599,7 @@ async function postToLoki(car) {
       // mode: 'no-cors',
       'Accept': 'text/plain',
       'Content-Type': 'application/json',
-      'Authorization': 'Basic ' + btoa('242200' + ':' + 'eyJrIjoiMWE5MGNkMzc3ODZkYzUxYjY0ODU3NTQ5ZDQ1M2EyZjMzMjNmOWExMyIsIm4iOiJsb2tpIiwiaWQiOjMyMzQwOH0=')
+      'Authorization': 'Basic ' + btoa('242200' + ':' + 'token')
     },
     body: paystr
   });

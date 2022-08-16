@@ -113,13 +113,13 @@ async function app() {
 
     if (lastCar && lastCar.endPos) {
     // if (lastCar && lastCar.image && lastCar.endPos) {
-      addCar(lastCar)
       setTimeout(() => {
-        const {image, canvas} = getScreenshot(video);
-        lastCar.image = image;
-        lastCar.canvas = canvas;
+        // const {image, canvas} = getScreenshot(video);
+        // lastCar.image = image;
+        // lastCar.canvas = canvas;
         postToLoki(lastCar)
-      }, 20);
+        addCar(lastCar)
+      }, 0);
     }
   }
 
@@ -169,11 +169,11 @@ async function app() {
           console.log('---- new car -----')
           const startTime = new Date().getTime();
           values["car"] = { start: startTime, count: 1, time: startTime, startPos: pred.bbox, width: pred.bbox[2], totalTime: totaltime };
-          // setTimeout(() => {
-          //   const {image, canvas} = getScreenshot(video);
-          //   values["car"].image = image;
-          //   values["car"].canvas = canvas;
-          // }, 200);
+          setTimeout(() => {
+            const {image, canvas} = getScreenshot(video);
+            values["car"].image = image;
+            values["car"].canvas = canvas;
+          }, 200);
         }
       }
       //}, 0);
@@ -429,7 +429,7 @@ function add(cat, car) {
  * @returns {Element} Screenshot image element
  */
 function getScreenshot(videoEl, scale) {
-  scale = scale || .6;  // make image smaller for loki size limit
+  scale = scale || .5;  // make image smaller for loki size limit
 
   const canvas = document.createElement("canvas");
   canvas.width = videoEl.clientWidth * scale;
@@ -517,10 +517,10 @@ function logStats(lastCar) {
     // console.log('FPS ' + feetPerSecond)
 
     // convert feet per second to mph
-    const mph = feetPerSecond / 1.467;
+    const mph = Math.round(feetPerSecond / 1.467);
 
     lastCar.realSpeed = mph;
-    lastCar.distanceInFeet = feet;
+    lastCar.distanceInFeet = Math.round(feet);
     lastCar.distanceInPixels = dist;
     lastCar.seconds = seconds;
     lastCar.totalSeconds = lastCar.totalTime / 1000;
@@ -530,17 +530,17 @@ function logStats(lastCar) {
 }
 
 function addCar(car) {
-  // const totalEl = document.getElementById('total');
-  // totalEl.innerHTML = cars.length;
-  // var ul = document.getElementById("cars");
-  // var li = document.createElement("li");
-  // // var img=document.createElement('img');
-  // // img.src=car.img;
-  // var span = document.createElement("span")
-  // span.innerHTML = Math.round(car.realSpeed);
-  // li.appendChild(span);
-  // li.appendChild(car.image);
-  // ul.appendChild(li);
+  const totalEl = document.getElementById('total');
+  totalEl.innerHTML = cars.length;
+  var ul = document.getElementById("cars");
+  var li = document.createElement("li");
+  // var img=document.createElement('img');
+  // img.src=car.image.src;
+  var span = document.createElement("span")
+  span.innerHTML = Math.round(car.realSpeed);
+  li.appendChild(span);
+  li.appendChild(car.image);
+  ul.appendChild(li);
 }
 
 async function postToLoki(car) {
@@ -590,7 +590,7 @@ async function postToLoki(car) {
   const paystr = JSON.stringify(payload);
   // console.log(paystr)
 
-  // console.log('posting to loki')
+  console.log('posting to loki')
   //https://logs-prod3.grafana.net/loki/api/v1/push
   const url = 'http://localhost:8010/proxy/loki/api/v1/push'
   const rawResponse = await fetch(url, {
