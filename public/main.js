@@ -20,10 +20,19 @@ let liveView = document.getElementById('liveView');
 
 let lastLog = new Date().getTime();
 
+let geo = {coords: {latitude: 0, longitude: 0}};
 
 const SPEED_LIMIT = 35;  // todo setting
 
 async function setup() {
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      geo = position;
+      console.log(geo)
+    });
+  }
+
   console.log('Loading model..');
   coco = await cocoSsd.load({base: 'mobilenet_v2'});
   console.log('Successfully loaded model');
@@ -133,6 +142,7 @@ async function app() {
 
         const cur = new Date().getTime();
         let car = values["car"] || { start: cur, count: 0 , time: cur, startPos: pred.bbox, width: pred.bbox[2], totalTime: totaltime };
+        // TODO: handle multiple cars at the same time
         if ((cur - car.time) < 500) {
           // same car
           car.count += 1;
@@ -157,7 +167,8 @@ async function app() {
           // console.log('last car ' + (lastCar.end - lastCar.start))
           // assume a new car
           console.log('---- new car -----')
-          values["car"] = { start: cur, count: 1, time: cur, startPos: pred.bbox, width: pred.bbox[2], totalTime: 0 };
+          const startTime = new Date().getTime();
+          values["car"] = { start: startTime, count: 1, time: startTime, startPos: pred.bbox, width: pred.bbox[2], totalTime: totaltime };
           // setTimeout(() => {
           //   const {image, canvas} = getScreenshot(video);
           //   values["car"].image = image;
@@ -418,7 +429,7 @@ function add(cat, car) {
  * @returns {Element} Screenshot image element
  */
 function getScreenshot(videoEl, scale) {
-  scale = scale || .5;  // make image smaller for loki size limit
+  scale = scale || .6;  // make image smaller for loki size limit
 
   const canvas = document.createElement("canvas");
   canvas.width = videoEl.clientWidth * scale;
@@ -544,6 +555,10 @@ async function postToLoki(car) {
     const image = canvas.toDataURL();
     car.image = image;
   }
+
+  car.lat = geo.coords.latitude;
+  car.lng = geo.coords.longitude;
+
     // const formData = new FormData();
     // formData.append('car', blob, `${car.name}.png`);
     // const res = await fetch('http://localhost:8082/upload', {
@@ -584,7 +599,7 @@ async function postToLoki(car) {
       // mode: 'no-cors',
       'Accept': 'text/plain',
       'Content-Type': 'application/json',
-      'Authorization': 'Basic ' + btoa('242200' + ':' + 'eyJrIjoiMWE5MGNkMzc3ODZkYzUxYjY0ODU3NTQ5ZDQ1M2EyZjMzMjNmOWExMyIsIm4iOiJsb2tpIiwiaWQiOjMyMzQwOH0=')
+      'Authorization': 'Basic ' + btoa('242200' + ':' + 'token')
     },
     body: paystr
   });
