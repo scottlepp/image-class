@@ -24,10 +24,11 @@
  *****************************************************/
 
  body {
-  font-family: helvetica, arial, sans-serif;
+  /* font-family: helvetica, arial, sans-serif; */
   /* margin: 2em; */
-  color: #3D3D3D;
-  display: flex;
+  /* color: #3D3D3D; */
+  /* display: flex; */
+  width: 100%;
 }
 
 h1 {
@@ -46,6 +47,7 @@ em {
 video {
   clear: both;
   display: block;
+  width: 100%;
 }
 
 section {
@@ -100,4 +102,30 @@ header, footer {
 
 .classifyOnClick img {
   width: 100%;
+}
+
+.min-h-full {
+  width: 100%;
+  min-height: unset !important;
+}
+
+#liveView {
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  /* background: whitesmoke; */
+}
+
+main > div {
+  display: flex;
+}
+
+#small-content-placeholder {
+  height: calc(100vh - 240px);
+  overflow: auto;
+}
+
+.list-item:hover {
+  cursor: pointer;
+  background: whitesmoke;
 }

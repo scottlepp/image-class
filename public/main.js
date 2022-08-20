@@ -5,8 +5,10 @@ let net;
 // worker.addEventListener('message', function(e) {
 //   console.log(e.data)
 // }, false);
-
+let expanded = false;
 // worker.postMessage({'cmd': 'start', 'msg': 'Hi'});
+
+let small_template;
 
 const timer = ms => new Promise(res => setTimeout(res, ms))
 
@@ -23,6 +25,8 @@ let lastLog = new Date().getTime();
 let geo = {coords: {latitude: 0, longitude: 0}};
 
 const SPEED_LIMIT = 35;  // todo setting
+
+const list = [];
 
 async function setup() {
 
@@ -172,6 +176,7 @@ async function app() {
           setTimeout(() => {
             const {image, canvas} = getScreenshot(video);
             values["car"].image = image;
+            values["car"].base64 = canvas.toDataURL();
             values["car"].canvas = canvas;
           }, 200);
         }
@@ -489,12 +494,15 @@ function logStats(lastCar) {
     const aveCarLength = 192;  // inches
     // const aveCarLength = 177;  // inches
 
+    lastCar.len = carLength;
     // use this to scale ( not sure what exactly to use )
     // maybe adjust (calibrate) based on average speed in relation to speed limit?
 
-    // const aveCarLength = 210;  // inches
+    ///const aveCarLength = 210;  // inches
 
-    // const carLength = widthInch * aveCarLength;
+    const carLength2 = widthInch * aveCarLength;
+    lastCar.lenFt = (carLen / 12);
+
     // console.log('car length ' + (carLength / 12))
     const time = lastCar.end - lastCar.start;
     // const inchDist = dist / PPI;
@@ -530,17 +538,22 @@ function logStats(lastCar) {
 }
 
 function addCar(car) {
-  const totalEl = document.getElementById('total');
-  totalEl.innerHTML = cars.length;
-  var ul = document.getElementById("cars");
-  var li = document.createElement("li");
-  // var img=document.createElement('img');
-  // img.src=car.image.src;
-  var span = document.createElement("span")
-  span.innerHTML = Math.round(car.realSpeed);
-  li.appendChild(span);
-  li.appendChild(car.image);
-  ul.appendChild(li);
+  // const totalEl = document.getElementById('total');
+  // totalEl.innerHTML = cars.length;
+  // var ul = document.getElementById("cars");
+  // var li = document.createElement("li");
+  // // var img=document.createElement('img');
+  // // img.src=car.image.src;
+  // var span = document.createElement("span")
+  // span.innerHTML = Math.round(car.realSpeed);
+  // li.appendChild(span);
+  // li.appendChild(car.image);
+  // ul.appendChild(li);
+  if ( list.length > 50 ) {
+    list.shift();
+  }
+  list.push(car);
+  $("#small-content-placeholder").html(small_template({list: list}));
 }
 
 async function postToLoki(car) {
@@ -559,6 +572,7 @@ async function postToLoki(car) {
   car.lat = geo.coords.latitude;
   car.lng = geo.coords.longitude;
 
+  const carCopy = {...car, base64: undefined};
     // const formData = new FormData();
     // formData.append('car', blob, `${car.name}.png`);
     // const res = await fetch('http://localhost:8082/upload', {
@@ -569,7 +583,7 @@ async function postToLoki(car) {
     // // const content = await rawResponse.json();
     // console.log(rawResponse);
 
-  const body = JSON.stringify(car);
+  const body = JSON.stringify(carCopy);
 
   const app = { app: "optycop" }
 
@@ -670,4 +684,21 @@ function enableCam(event) {
     video.srcObject = stream;
     video.addEventListener('loadeddata', app);
   });
+}
+
+function toggle(e) {
+  // console.log(e);
+
+  const el = $(e);
+  console.log(el.attr('name'));
+
+  const name = el.attr('name')
+  const img = $('#' + name);
+
+  if (img.is(":hidden")) {
+    img.show();
+  } else {
+    img.hide();
+  }
+  
 }
