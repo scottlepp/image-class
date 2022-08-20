@@ -1,0 +1,4 @@
+sum by (app, namespace) (
+count_over_time( {app="optycop"} |= `` | json | realSpeed >= 50 | realSpeed < 70 [5m])) > 0
+
+¯\_(ツ)_/¯
